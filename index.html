@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gardenium Plants Terminal - Inventory Management</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Poppins', sans-serif; }
+        .fade-enter-active, .fade-leave-active { transition: opacity .5s; }
+        .fade-enter, .fade-leave-to { opacity: 0; }
+        .scrollable-table { max-height: 70vh; overflow-y: auto; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="app" class="min-h-screen">
+        <nav class="bg-emerald-600 text-white p-4">
+            <div class="container mx-auto flex flex-wrap justify-between items-center">
+                <h1 class="text-2xl font-bold">Gardenium Plants Terminal</h1>
+                <div class="flex gap-4 mt-2 sm:mt-0">
+                    <button @click="currentView = 'inventory'" :class="{'bg-emerald-700': currentView === 'inventory'}" class="px-4 py-2 rounded-lg hover:bg-emerald-700">
+                        <i class="bi bi-box-seam"></i> Inventory
+                    </button>
+                    <button @click="currentView = 'sales'" :class="{'bg-emerald-700': currentView === 'sales'}" class="px-4 py-2 rounded-lg hover:bg-emerald-700">
+                        <i class="bi bi-cart"></i> Sales
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <main class="container mx-auto p-4">
+            <div v-if="currentView === 'inventory'" class="space-y-6">
+                <div class="flex flex-wrap justify-between items-center gap-4">
+                    <h2 class="text-xl font-semibold">Inventory Management</h2>
+                    <button @click="showAddItemModal = true" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">
+                        <i class="bi bi-plus-lg"></i> Add New Item
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap gap-4 mb-4">
+                    <input v-model="searchQuery" type="text" placeholder="Search items..." class="p-2 border rounded-lg flex-grow">
+                    <select v-model="categoryFilter" class="p-2 border rounded-lg">
+                        <option value="">All Categories</option>
+                        <option value="plants">Plants</option>
+                        <option value="pots">Pots</option>
+                        <option value="tools">Tools</option>
+                        <option value="fertilizers">Fertilizers</option>
+                        <option value="insecticides">Insecticides</option>
+                    </select>
+                </div>
+
+                <div class="bg-white rounded-lg shadow">
+                    <div class="scrollable-table">
+                        <table class="w-full">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="p-4 text-left">Item Name</th>
+                                    <th class="p-4 text-left">Category</th>
+                                    <th class="p-4 text-left hidden md:table-cell">Specifications</th>
+                                    <th class="p-4 text-left">Stock</th>
+                                    <th class="p-4 text-left">Purchase Price</th>
+                                    <th class="p-4 text-left">Sale Price</th>
+                                    <th class="p-4 text-left">Margin</th>
+                                    <th class="p-4 text-left">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="item in filteredItems" :key="item.id" class="border-t hover:bg-gray-50">
+                                    <td class="p-4">{{item.name}}</td>
+                                    <td class="p-4">{{item.category}}</td>
+                                    <td class="p-4 hidden md:table-cell">
+                                        <span v-if="item.specifications" class="text-sm">
+                                            <div v-for="(value, key) in item.specifications" :key="key">
+                                                {{key}}: {{value}}
+                                            </div>
+                                        </span>
+                                    </td>
+                                    <td class="p-4" :class="{'text-red-600': item.stock < 10}">{{item.stock}}</td>
+                                    <td class="p-4">₹{{item.purchasePrice}}</td>
+                                    <td class="p-4">₹{{item.salePrice}}</td>
+                                    <td class="p-4">{{calculateMargin(item)}}%</td>
+                                    <td class="p-4">
+                                        <button @click="editItem(item)" class="text-blue-600 hover:text-blue-800 mr-2">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button @click="deleteItem(item.id)" class="text-red-600 hover:text-red-800">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add/Edit Item Modal -->
+            <div v-if="showAddItemModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 overflow-y-auto">
+                <div class="bg-white rounded-lg p-6 max-w-2xl w-full">
+                    <h3 class="text-xl font-semibold mb-4">{{editingItem ? 'Edit' : 'Add'}} Item</h3>
+                    <form @submit.prevent="saveItem" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block mb-1">Item Name*</label>
+                                <input v-model="newItem.name" required class="w-full p-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block mb-1">Category*</label>
+                                <select v-model="newItem.category" required class="w-full p-2 border rounded" @change="updateSpecifications">
+                                    <option value="plants">Plants</option>
+                                    <option value="pots">Pots</option>
+                                    <option value="tools">Tools</option>
+                                    <option value="fertilizers">Fertilizers</option>
+                                    <option value="insecticides">Insecticides</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block mb-1">Stock*</label>
+                                <input v-model="newItem.stock" type="number" required class="w-full p-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block mb-1">Purchase Price (₹)*</label>
+                                <input v-model="newItem.purchasePrice" type="number" step="0.01" required class="w-full p-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block mb-1">Sale Price (₹)*</label>
+                                <input v-model="newItem.salePrice" type="number" step="0.01" required class="w-full p-2 border rounded">
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Specifications based on category -->
+                        <div class="border-t pt-4">
+                            <h4 class="font-semibold mb-2">Specifications</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <template v-if="newItem.category === 'plants'">
+                                    <div>
+                                        <label class="block mb-1">Height (cm)</label>
+                                        <input v-model="newItem.specifications.height" type="number" class="w-full p-2 border rounded">
+                                    </div>
+                                    <div>
+                                        <label class="block mb-1">Pot Size (inches)</label>
+                                        <input v-model="newItem.specifications.potSize" type="number" class="w-full p-2 border rounded">
+                                    </div>
+                                    <div>
+                                        <label class="block mb-1">Light Requirement</label>
+                                        <select v-model="newItem.specifications.light" class="w-full p-2 border rounded">
+                                            <option value="Full Sun">Full Sun</option>
+                                            <option value="Partial Shade">Partial Shade</option>
+                                            <option value="Shade">Shade</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block mb-1">Water Requirement</label>
+                                        <select v-model="newItem.specifications.water" class="w-full p-2 border rounded">
+                                            <option value="High">High</option>
+                                            <option value="Medium">Medium</option>
+                                            <option value="Low">Low</option>
+                                        </select>
+                                    </div>
+                                </template>
+
+                                <template v-if="newItem.category === 'pots'">
+                                    <div>
+                                        <label class="block mb-1">Material</label>
+                                        <select v-model="newItem.specifications.material" class="w-full p-2 border rounded">
+                                            <option value="Ceramic">Ceramic</option>
+                                            <option value="Plastic">Plastic</option>
+                                            <option value="Terracotta">Terracotta</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block mb-1">Diameter (inches)</label>
+                                        <input v-model="newItem.specifications.diameter" type="number" class="w-full p-2 border rounded">
+                                    </div>
+                                    <div>
+                                        <label class="block mb-1">Color</label>
+                                        <input v-model="newItem.specifications.color" type="text" class="w-full p-2 border rounded">
+                                    </div>
+                                </template>
+
+                                <template v-if="newItem.category === 'fertilizers'">
+                                    <div>
+                                        <label class="block mb-1">Weight (kg)</label>
+                                        <input v-model="newItem.specifications.weight" type="number" class="w-full p-2 border rounded">
+                                    </div>
+                                    <div>
+                                        <label class="block mb-1">Type</label>
+                                        <select v-model="newItem.specifications.type" class="w-full p-2 border rounded">
+                                            <option value="Organic">Organic</option>
+                                            <option value="Chemical">Chemical</option>
+                                            <option value="Mixed">Mixed</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block mb-1">NPK Ratio</label>
+                                        <input v-model="newItem.specifications.npkRatio" type="text" class="w-full p-2 border rounded">
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end gap-2 pt-4">
+                            <button type="button" @click="showAddItemModal = false" class="px-4 py-2 border rounded hover:bg-gray-100">Cancel</button>
+                            <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">Save</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    currentView: 'inventory',
+                    searchQuery: '',
+                    categoryFilter: '',
+                    showAddItemModal: false,
+                    editingItem: null,
+                    inventory: [
+                        {
+                            id: 1,
+                            name: 'Money Plant',
+                            category: 'plants',
+                            stock: 15,
+                            purchasePrice: 150,
+                            salePrice: 299,
+                            specifications: {
+                                height: 30,
+                                potSize: 6,
+                                light: 'Partial Shade',
+                                water: 'Medium'
+                            }
+                        },
+                        {
+                            id: 2,
+                            name: 'Ceramic Pot (White)',
+                            category: 'pots',
+                            stock: 8,
+                            purchasePrice: 100,
+                            salePrice: 199,
+                            specifications: {
+                                material: 'Ceramic',
+                                diameter: 8,
+                                color: 'White'
+                            }
+                        }
+                    ],
+                    newItem: {
+                        name: '',
+                        category: '',
+                        stock: 0,
+                        purchasePrice: 0,
+                        salePrice: 0,
+                        specifications: {}
+                    }
+                }
+            },
+            computed: {
+                filteredItems() {
+                    return this.inventory.filter(item => {
+                        const matchesSearch = item.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+                        const matchesCategory = !this.categoryFilter || item.category === this.categoryFilter
+                        return matchesSearch && matchesCategory
+                    })
+                }
+            },
+            methods: {
+                calculateMargin(item) {
+                    return (((item.salePrice - item.purchasePrice) / item.purchasePrice) * 100).toFixed(1)
+                },
+                updateSpecifications() {
+                    this.newItem.specifications = {}
+                    if (this.newItem.category === 'plants') {
+                        this.newItem.specifications = {
+                            height: '',
+                            potSize: '',
+                            light: 'Partial Shade',
+                            water: 'Medium'
+                        }
+                    } else if (this.newItem.category === 'pots') {
+                        this.newItem.specifications = {
+                            material: 'Ceramic',
+                            diameter: '',
+                            color: ''
+                        }
+                    } else if (this.newItem.category === 'fertilizers') {
+                        this.newItem.specifications = {
+                            weight: '',
+                            type: 'Organic',
+                            npkRatio: ''
+                        }
+                    }
+                },
+                editItem(item) {
+                    this.editingItem = item
+                    this.newItem = JSON.parse(JSON.stringify(item))
+                    this.showAddItemModal = true
+                },
+                saveItem() {
+                    if (this.editingItem) {
+                        const index = this.inventory.findIndex(item => item.id === this.editingItem.id)
+                        this.inventory[index] = { ...this.newItem }
+                    } else {
+                        this.inventory.push({
+                            id: this.inventory.length + 1,
+                            ...this.newItem
+                        })
+                    }
+                    this.showAddItemModal = false
+                    this.newItem = {
+                        name: '',
+                        category: '',
+                        stock: 0,
+                        purchasePrice: 0,
+                        salePrice: 0,
+                        specifications: {}
+                    }
+                    this.editingItem = null
+                },
+                deleteItem(id) {
+                    if (confirm('Are you sure you want to delete this item?')) {
+                        this.inventory = this.inventory.filter(item => item.id !== id)
+                    }
+                }
+            }
+        }).mount('#app')
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
